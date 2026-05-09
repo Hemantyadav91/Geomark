@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /users/{userId} {
+      // Anyone signed in can read user profiles (needed to see teacher names, student names, etc.)
+      allow read: if isSignedIn();
+      // Users can only create/update their own profile document
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      // Nobody can delete user profiles from the app
+      allow delete: if false;
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isSignedIn();
+      // Only the teacher who owns the session can create/modify it
+      allow create: if isSignedIn() && request.resource.data.teacherId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.teacherId == request.auth.uid;
+    }
+
+    match /attendance/{attendanceId} {
+      // Users can read their own attendance records
+      // Teachers would typically need to read session attendance, but since 
+      // there is no easy "isTeacher" check without extra reads, a basic 
+      // implementation allows authenticated reads if it's their own record 
+      // or if we simply allow signed-in reads (for teacher dashboard functionality).
+      // Given the simple schema without a dedicated admin tier, we allow read if signed in 
+      // (a tighter implementation would verify teacher role via a get().)
+      allow read: if isSignedIn(); 
+      
+      // Students can only mark their own attendance
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}
